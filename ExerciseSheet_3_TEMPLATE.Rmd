@@ -4,6 +4,9 @@ subtitle: "Fortgeschrittene Statistische Software für NF"
 author: "Lirona Iseni (12591525), Name (Martrikelnummer), ..."
 date: "`r Sys.Date()`"
 output: distill::distill_article
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ## General Remarks
@@ -46,24 +49,26 @@ c)  For all of the following tasks in this exercise sheet we ask you to
 
 d)  Name 2 strengths and 2 weaknesses of git. (Don't forget to create a
     commit after this answer, see *1c*)
-    
+
     # Exercise 1d: Git Strengths & Weaknesses
 
 # Strengths:
+
 # 1. Distributed Version Control: Every user has a full repository history, enabling offline work and redundancy.
+
 # 2. Branching/Merging: Isolate features/fixes in branches and merge them seamlessly.
 
 # Weaknesses:
+
 # 1. Learning Curve: Complex commands (e.g., rebase, conflict resolution) challenge beginners.
+
 # 2. Large File Handling: Struggles with binary files (e.g., .xlsx, .png) without Git LFS.
-    
+
 e)  Knit this exercise sheet. Some new files will automatically be
     generated when knitting the sheet e.g. the HTML page. Ignore these
     files, as we only want to track the source files themselves. You
     can, but don't need to create a `.gitignore` file. Just do not
     commit these files manually.
-    
-    
 
 ## Exercise 2: Putting your Repository on GitHub (3 Points)
 
@@ -78,6 +83,9 @@ b)  Push your code to this new repository by copying and executing the
     `…or push an existing repository from the command line`.
 c)  Regularly push your latest changes to GitHub again and especially do
     so when you are finished with this sheet.
+    
+GitHub repository link: https://github.com/lironaisn/exeRcise-sheet-3
+
 
 ## Exercise 3: Pixar Films (4 Points)
 
@@ -89,25 +97,89 @@ Link:
 
 For small datasets like these adding them to git is not a problem.
 
+```{r}
+download.file(
+  url = "https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-03-11/pixar_films.csv",
+  destfile = "pixar_films.csv"
+)
+
+download.file(
+  url = "https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-03-11/public_response.csv",
+  destfile = "public_response.csv"
+)
+```
+
+
 a)  Load the `pixar_films` dataset into R. Clean the dataset by removing
     films without a title. Inspect the variable `film_rating`. What are
     the possible values and what do they mean? Create a factor variable
     for the film rating. Why is this appropriate?
+```{r}
+library(tidyverse)
 
-<!-- -->
+pixar_films <- read_csv("pixar_films.csv") %>%
+  filter(!is.na(film)) %>%
+  mutate(
+    film_rating = case_when(
+      film_rating == "N/A" ~ NA_character_,
+      film_rating == "Not Rated" ~ NA_character_,
+      TRUE ~ film_rating
+    ),
+    film_rating_fct = factor(film_rating, 
+                             levels = c("G", "PG"),
+                             ordered = TRUE)
+  )
+```
 
 b)  Inspect the film titles manually. Which films form a film series? A
     film series can be identified by a common word in the titles of the
     films, often in conjunction with a number in the title,
-    e.g. "Despicable Me" and "Despicable Me 2". Create a dataframe which
-    displays a list of the different series with the titles of the films
-    and how many films belong to the series. Output the dataframe.
+    e.g. "Despicable Me" and "Despicable Me 2". Create a dataframe which displays a list of the different series with the titles of the films and how many films belong to the series. Output the dataframe.
+    
+```{r}
+series_df <- pixar_films %>%
+  mutate(
+    series = case_when(
+      str_detect(film, "Toy Story") ~ "Toy Story",
+      str_detect(film, "Cars") ~ "Cars",
+      str_detect(film, "Finding|Dory") ~ "Finding Nemo",
+      str_detect(film, "Incredibles") ~ "Incredibles",
+      str_detect(film, "Monsters") ~ "Monsters Inc",
+      TRUE ~ "Standalone"
+    )
+  ) %>%
+  filter(series != "Standalone") %>%
+  group_by(series) %>%
+  summarise(
+    films = list(film),
+    num_films = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(films = map_chr(films, ~paste(sort(.x), collapse = ", ")))
+
+series_df %>%
+  knitr::kable(col.names = c("Series", "Films", "Number of Films"))
+```
+    
 
 c)  Load the `public_response` dataframe into R. Convert the
     `cinema_score` variable into a factor while ensuring the factor
     levels are defined in ascending order, from the lowest to the
     highest score. Combine `public_response` with the `pixar_films`
     dataset using an appropriate merge variable.
+
+```{r}
+public_response <- read_csv("public_response.csv") %>%
+  mutate(
+    cinema_score = factor(cinema_score,
+                         levels = c("F", "D", "C", "B", "A-", "A", "A+"),
+                         ordered = TRUE)
+  )
+
+combined_data <- pixar_films %>%
+  inner_join(public_response, by = "film")
+```
+
 
 d)  Choose one of the variables representing the public response and
     create a bar plot for the films belonging to a series. Here are the
@@ -124,6 +196,46 @@ d)  Choose one of the variables representing the public response and
     What do you notice when comparing the scores of the films in a
     series? Do you see any patterns?
 
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+plot_data <- combined_data %>%
+  mutate(
+    series = case_when(
+      str_detect(film, "Toy Story") ~ "Toy Story",
+      str_detect(film, "Cars") ~ "Cars",
+      str_detect(film, "Finding|Dory") ~ "Finding Nemo",
+      str_detect(film, "Incredibles") ~ "Incredibles",
+      str_detect(film, "Monsters") ~ "Monsters Inc",
+      TRUE ~ "Standalone"
+    )
+  ) %>%
+  filter(series != "Standalone") %>%
+  arrange(series, release_date)
+
+ggplot(plot_data, aes(x = series, y = rotten_tomatoes, fill = fct_inorder(film))) +
+  geom_col(position = position_dodge(preserve = "single"), width = 0.7) +
+  geom_text(aes(label = rotten_tomatoes), 
+            position = position_dodge(width = 0.7),
+            vjust = -0.5, size = 3) +
+  labs(
+    title = "Pixar Film Series: Rotten Tomatoes Scores",
+    subtitle = "Comparing critical reception across franchises",
+    x = "Film Series",
+    y = "Rotten Tomatoes Score (%)",
+    fill = "Film Title"
+  ) +
+  scale_y_continuous(limits = c(0, 105), expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 15, hjust = 1),
+    legend.position = "bottom",
+    legend.text = element_text(size = 7)
+  )
+```
+
 ## Exercise 4: Open Analysis (4 points)
 
 This exercise is a bit more open-ended. You can choose any dataset from
@@ -133,23 +245,84 @@ determining the research question yourself.
 a)  Go to <https://github.com/owid/owid-datasets/tree/master/datasets>
     and choose a dataset that interests you. You can have a look at
     <https://ourworldindata.org/> to gather some inspiration.
+  
 b)  Download the dataset and track it in git.
+
+```{r}
+download.file(
+  url = "https://raw.githubusercontent.com/owid/owid-datasets/master/datasets/Annual%20world%20population%20growth%20rate%20-%20OWID/Annual%20world%20population%20growth%20rate%20-%20OWID.csv",
+  destfile = "world_population_growth.csv"
+)
+```
+
 c)  Put the name / title of the dataset and a link to it below.
 
--   Dataset Name: ...
--   Link: <https://github.com/owid/owid-datasets/>...
+-   Dataset Name: Adding Annual world population growth rate - OWID
+-   Link: <https://github.com/owid/owid-datasets/tree/master/datasets/Annual%20world%20population%20growth%20rate%20-%20OWID>
 
 d)  Come up with a (research) question you want to answer with the data
     and briefly explain why you believe this is an interesting question
     within one sentence. It should be a question that can be answered
     with the dataset and using R.
+    
+Topic: Adding Annual world population growth rate - OWID: How has the global population growth rate changed since 1950, and what are the key trends?
+    
 e)  Use R to answer your chosen question. Please limit your analysis to
     the functions and techniques we have covered so far in the course.
     You are **not expected** to use advanced statistical models or
     external packages which haven't been introduced.
+    
+```{r}
+pop_growth <- read.csv("world_population_growth.csv")
+
+names(pop_growth) <- c("entity", "year", "growth_rate")
+
+pop_since_1950 <- pop_growth[pop_growth$year >= 1950 & pop_growth$entity == "World", ]
+
+max_growth <- max(pop_since_1950$growth_rate, na.rm = TRUE)
+min_growth <- min(pop_since_1950$growth_rate, na.rm = TRUE)
+current_growth <- tail(pop_since_1950$growth_rate[!is.na(pop_since_1950$growth_rate)], 1)
+year_max_growth <- pop_since_1950$year[which.max(pop_since_1950$growth_rate)]
+
+cat("Global population growth rate analysis since 1950:\n")
+cat("- Peak growth rate:", round(max_growth, 4), "% in", year_max_growth, "\n")
+cat("- Minimum growth rate since 1950:", round(min_growth, 4), "%\n")
+cat("- Current growth rate:", round(current_growth, 4), "%\n")
+cat("- Overall trend: The growth rate peaked around", year_max_growth, 
+    "and has been", ifelse(current_growth < max_growth, "declining", "increasing"), "since then.\n")
+```
+    
+    
 f)  Create a meaningful plot / figure with the dataset. Make sure to
     provide a figure caption (via the chunk options / Rmarkdown) and
     correctly label the figure.
+    
+```{r}
+plot(pop_since_1950$year, pop_since_1950$growth_rate, 
+     type = "l", 
+     col = "blue", 
+     lwd = 2,
+     main = "Global Population Growth Rate (1950-Present)",
+     xlab = "Year",
+     ylab = "Growth Rate (%)",
+     ylim = c(0.5, 2.5))
+
+abline(h = 0, col = "gray", lty = 2)
+
+points(year_max_growth, max_growth, col = "red", pch = 19)
+text(year_max_growth, max_growth, 
+     labels = paste("Peak: ", round(max_growth, 2), "%"), 
+     pos = 3, col = "red")
+
+text(max(pop_since_1950$year), current_growth, 
+     labels = paste("Current: ", round(current_growth, 2), "%"), 
+     pos = 3, col = "darkgreen")
+
+lines(lowess(pop_since_1950$year, pop_since_1950$growth_rate), 
+      col = "orange", lwd = 2, lty = 2)
+legend("topright", legend = "Trend line", col = "orange", lty = 2, lwd = 2)
+```
+
 
 ## Final Note
 
